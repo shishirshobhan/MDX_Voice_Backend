@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+   id            String    @id @default(uuid())
+   firebaseUid   String    @unique @map("firebase_uid")
+   email         String    @unique
+   displayName   String?   @map("display_name")
+   photoURL      String?   @map("photo_url")
+   createdAt     DateTime  @default(now()) @map("created_at")
+   updatedAt     DateTime  @updatedAt @map("updated_at")
+   lastLoginAt   DateTime  @default(now()) @map("last_login_at")
+  
+  // Relations
+  assessmentAttempts AssessmentAttempt[]
+  mcqAnswers         MCQAnswer[]
+  articles           Article[]
+  userStories        UserStory[]
+  posts              Post[]
+  
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+// ===== ASSESSMENT & MCQ SECTION =====
+
+model Assessment {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  sections    Section[]
+  attempts    AssessmentAttempt[]
+  
+  @@map("assessments")
+}
+
+model Section {
+  id           String     @id @default(cuid())
+  assessmentId String
+  name         String     // e.g., "Science", "Math"
+  description  String?
+  order        Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  
+  // Relations
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questions    MCQQuestion[]
+  
+  @@map("sections")
+}
+
+model MCQQuestion {
+  id          String    @id @default(cuid())
+  sectionId   String
+  question    String
+  explanation String?   // Optional explanation for the answer
+  order       Int       @default(0)
+  points      Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  section     Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  options     MCQOption[]
+  answers     MCQAnswer[]
+  
+  @@map("mcq_questions")
+}
+
+model MCQOption {
+  id         String      @id @default(cuid())
+  questionId String
+  text       String
+  isCorrect  Boolean     @default(false)
+  order      Int         @default(0)
+  createdAt  DateTime    @default(now())
+  
+  // Relations
+  question   MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  @@map("mcq_options")
+}
+
+model AssessmentAttempt {
+  id           String    @id @default(cuid())
+  userId       String
+  assessmentId String
+  score        Float?
+  totalPoints  Int?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  
+  // Relations
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  answers      MCQAnswer[]
+  
+  @@map("assessment_attempts")
+}
+
+model MCQAnswer {
+  id         String            @id @default(cuid())
+  attemptId  String
+  questionId String
+  optionId   String?           // Selected option
+  isCorrect  Boolean?
+  answeredAt DateTime          @default(now())
+  userId     String
+  
+  // Relations
+  attempt    AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question   MCQQuestion       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([attemptId, questionId])
+  @@map("mcq_answers")
+}
+
+// ===== ARTICLE SECTION =====
+
+model Article {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  content     String    @db.Text
+  excerpt     String?
+  coverImage  String?
+  authorId    String
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tags        ArticleTag[]
+  
+  @@map("articles")
+}
+
+model Tag {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  slug      String       @unique
+  createdAt DateTime     @default(now())
+  
+  // Relations
+  articles  ArticleTag[]
+  
+  @@map("tags")
+}
+
+model ArticleTag {
+  articleId String
+  tagId     String
+  
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  @@id([articleId, tagId])
+  @@map("article_tags")
+}
+
+// ===== USER STORIES (VIDEO) SECTION =====
+
+model UserStory {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  videoUrl    String    // URL to video file
+  thumbnail   String?
+  duration    Int?      // Duration in seconds
+  views       Int       @default(0)
+  published   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_stories")
+}
+
+// ===== SOCIAL POST SECTION =====
+
+model Post {
+  id        String    @id @default(cuid())
+  userId    String
+  content   String    @db.Text
+  images    String[]  // Array of image URLs
+  published Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("posts")
+}
