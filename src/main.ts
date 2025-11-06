@@ -12,6 +12,7 @@ async function bootstrap() {
     .setVersion('1.0')
     .addBearerAuth() // optional: adds JWT Auth button
     .build();
+  
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document); // http://localhost:3000/api

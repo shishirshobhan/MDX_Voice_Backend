@@ -15,9 +15,20 @@ import { FirebaseModule } from './firebase/firebase.module';
 
 @Global()
 @Module({
-  imports: [UserModule,PrismaModule, ArticlesModule, FirebaseModule, AssessmentModule, HelpCentersModule, TestimonialModule, StoryModule, AuthModule,ConfigModule.forRoot({
+  imports: [
+    UserModule,
+    PrismaModule,
+    ArticlesModule,
+    FirebaseModule,
+    AssessmentModule,
+    HelpCentersModule,
+    TestimonialModule,
+    StoryModule,
+    AuthModule,
+    ConfigModule.forRoot({
       isGlobal: true,
-    }),],
+    }),
+  ],
   controllers: [AppController],
   providers: [AppService, FirebaseService],
   exports: [FirebaseService],

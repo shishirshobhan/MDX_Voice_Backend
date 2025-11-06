@@ -4,13 +4,13 @@ CREATE TYPE "Role" AS ENUM ('USER', 'ADMIN', 'MODERATOR');
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
-    "firebaseUid" TEXT NOT NULL,
+    "firebase_uid" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "displayName" TEXT,
-    "photoUrl" TEXT,
-    "role" "Role" NOT NULL DEFAULT 'USER',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "display_name" TEXT,
+    "photo_url" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "last_login_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
@@ -67,19 +67,6 @@ CREATE TABLE "mcq_options" (
 );
 
 -- CreateTable
-CREATE TABLE "assessment_attempts" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "assessmentId" TEXT NOT NULL,
-    "score" DOUBLE PRECISION,
-    "totalPoints" INTEGER,
-    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "completedAt" TIMESTAMP(3),
-
-    CONSTRAINT "assessment_attempts_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "mcq_answers" (
     "id" TEXT NOT NULL,
     "attemptId" TEXT NOT NULL,
@@ -128,6 +115,22 @@ CREATE TABLE "article_tags" (
 );
 
 -- CreateTable
+CREATE TABLE "help_centers" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "logo" TEXT,
+    "phone_number" TEXT,
+    "email" TEXT NOT NULL,
+    "address" TEXT,
+    "description" TEXT,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "help_centers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "user_stories" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -157,8 +160,24 @@ CREATE TABLE "posts" (
     CONSTRAINT "posts_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "testimonials" (
+    "id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT,
+    "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "admin_id" TEXT NOT NULL,
+    "thumbnail" TEXT,
+    "video_url" TEXT NOT NULL,
+    "published" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "testimonials_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
-CREATE UNIQUE INDEX "users_firebaseUid_key" ON "users"("firebaseUid");
+CREATE UNIQUE INDEX "users_firebase_uid_key" ON "users"("firebase_uid");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
@@ -185,15 +204,6 @@ ALTER TABLE "mcq_questions" ADD CONSTRAINT "mcq_questions_sectionId_fkey" FOREIG
 ALTER TABLE "mcq_options" ADD CONSTRAINT "mcq_options_questionId_fkey" FOREIGN KEY ("questionId") REFERENCES "mcq_questions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "assessment_attempts" ADD CONSTRAINT "assessment_attempts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "assessment_attempts" ADD CONSTRAINT "assessment_attempts_assessmentId_fkey" FOREIGN KEY ("assessmentId") REFERENCES "assessments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "mcq_answers" ADD CONSTRAINT "mcq_answers_attemptId_fkey" FOREIGN KEY ("attemptId") REFERENCES "assessment_attempts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "mcq_answers" ADD CONSTRAINT "mcq_answers_questionId_fkey" FOREIGN KEY ("questionId") REFERENCES "mcq_questions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -213,3 +223,6 @@ ALTER TABLE "user_stories" ADD CONSTRAINT "user_stories_userId_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "posts" ADD CONSTRAINT "posts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "testimonials" ADD CONSTRAINT "testimonials_admin_id_fkey" FOREIGN KEY ("admin_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -1,26 +1,205 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 import { CreateArticleDto } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
-
 @Injectable()
-export class ArticlesService {
-  create(createArticleDto: CreateArticleDto) {
-    return 'This action adds a new article';
+export class ArticleService {
+  constructor(private prisma: PrismaService) {}
+
+  async create(createArticleDto: CreateArticleDto) {
+    const { tagIds, ...articleData } = createArticleDto;
+
+    // Check if slug already exists
+    const existingArticle = await this.prisma.article.findUnique({
+      where: { slug: articleData.slug },
+    });
+
+    if (existingArticle) {
+      throw new ConflictException('Article with this slug already exists');
+    }
+
+    // Create article with tags
+    const article = await this.prisma.article.create({
+      data: {
+        ...articleData,
+        publishedAt: articleData.published ? new Date() : null,
+        tags: tagIds?.length
+          ? {
+              create: tagIds.map((tagId) => ({
+                tag: { connect: { id: tagId } },
+              })),
+            }
+          : undefined,
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            photoURL: true,
+          },
+        },
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+      },
+    });
+
+    return this.formatArticleResponse(article);
   }
 
-  findAll() {
-    return `This action returns all articles`;
+  async findOne(id: string) {
+    const article = await this.prisma.article.findUnique({
+      where: { id },
+      include: {
+        author: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            photoURL: true,
+          },
+        },
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+      },
+    });
+
+    if (!article) {
+      throw new NotFoundException(`Article with ID ${id} not found`);
+    }
+
+    return this.formatArticleResponse(article);
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} article`;
+    async findAll() {
+    const articles = await this.prisma.article.findMany();
+
+    return this.formatArticleResponse(articles);
   }
 
-  update(id: number, updateArticleDto: UpdateArticleDto) {
-    return `This action updates a #${id} article`;
+  async findBySlug(slug: string) {
+    const article = await this.prisma.article.findUnique({
+      where: { slug },
+      include: {
+        author: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            photoURL: true,
+          },
+        },
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+      },
+    });
+
+    if (!article) {
+      throw new NotFoundException(`Article with slug ${slug} not found`);
+    }
+
+    return this.formatArticleResponse(article);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} article`;
+  async update(id: string, updateArticleDto: UpdateArticleDto) {
+    const { tagIds, ...articleData } = updateArticleDto;
+
+    // Check if article exists
+    await this.findOne(id);
+
+    // Check if slug is being updated and already exists
+    if (articleData.slug) {
+      const existingArticle = await this.prisma.article.findUnique({
+        where: { slug: articleData.slug },
+      });
+
+      if (existingArticle && existingArticle.id !== id) {
+        throw new ConflictException('Article with this slug already exists');
+      }
+    }
+
+    // Handle published status
+    if (articleData.published !== undefined) {
+      const currentArticle = await this.prisma.article.findUnique({
+        where: { id },
+      });
+
+      if (articleData.published && !currentArticle?.published) {
+        articleData['publishedAt'] = new Date();
+      } else if (!articleData.published) {
+        articleData['publishedAt'] = null;
+      }
+    }
+
+    // Update article with tags
+    const article = await this.prisma.article.update({
+      where: { id },
+      data: {
+        ...articleData,
+        ...(tagIds !== undefined && {
+          tags: {
+            deleteMany: {},
+            create: tagIds.map((tagId) => ({
+              tag: { connect: { id: tagId } },
+            })),
+          },
+        }),
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            displayName: true,
+            email: true,
+            photoURL: true,
+          },
+        },
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+      },
+    });
+
+    return this.formatArticleResponse(article);
+  }
+
+  async remove(id: string) {
+    await this.findOne(id);
+
+    await this.prisma.article.delete({
+      where: { id },
+    });
+
+    return { message: 'Article deleted successfully' };
+  }
+
+  private formatArticleResponse(article: any) {
+    return {
+      id: article.id,
+      title: article.title,
+      slug: article.slug,
+      content: article.content,
+      excerpt: article.excerpt,
+      coverImage: article.coverImage,
+      authorId: article.authorId,
+      published: article.published,
+      publishedAt: article.publishedAt,
+      createdAt: article.createdAt,
+      updatedAt: article.updatedAt,
+      author: article.author,
+      tags: article.tags?.map((at: any) => at.tag) || [],
+    };
   }
 }

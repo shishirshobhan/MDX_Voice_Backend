@@ -9,22 +9,22 @@ datasource db {
 
 // User Management
 model User {
-   id            String    @id @default(uuid())
-   firebaseUid   String    @unique @map("firebase_uid")
-   email         String    @unique
-   displayName   String?   @map("display_name")
-   photoURL      String?   @map("photo_url")
-   createdAt     DateTime  @default(now()) @map("created_at")
-   updatedAt     DateTime  @updatedAt @map("updated_at")
-   lastLoginAt   DateTime  @default(now()) @map("last_login_at")
+  id            String    @id @default(uuid())
+  firebaseUid   String    @unique @map("firebase_uid")
+  email         String    @unique
+  displayName   String?   @map("display_name")
+  photoURL      String?   @map("photo_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime  @default(now()) @map("last_login_at")
   
   // Relations
-  assessmentAttempts AssessmentAttempt[]
   mcqAnswers         MCQAnswer[]
   articles           Article[]
   userStories        UserStory[]
   posts              Post[]
-  
+  testimonials       Testimonial[] @relation("UserTestimonials")
+
   @@map("users")
 }
 
@@ -46,7 +46,6 @@ model Assessment {
   
   // Relations
   sections    Section[]
-  attempts    AssessmentAttempt[]
   
   @@map("assessments")
 }
@@ -66,6 +65,7 @@ model Section {
   
   @@map("sections")
 }
+
 
 model MCQQuestion {
   id          String    @id @default(cuid())
@@ -99,23 +99,6 @@ model MCQOption {
   @@map("mcq_options")
 }
 
-model AssessmentAttempt {
-  id           String    @id @default(cuid())
-  userId       String
-  assessmentId String
-  score        Float?
-  totalPoints  Int?
-  startedAt    DateTime  @default(now())
-  completedAt  DateTime?
-  
-  // Relations
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  answers      MCQAnswer[]
-  
-  @@map("assessment_attempts")
-}
-
 model MCQAnswer {
   id         String            @id @default(cuid())
   attemptId  String
@@ -126,7 +109,7 @@ model MCQAnswer {
   userId     String
   
   // Relations
-  attempt    AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
   question   MCQQuestion       @relation(fields: [questionId], references: [id], onDelete: Cascade)
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   
@@ -179,6 +162,22 @@ model ArticleTag {
   @@map("article_tags")
 }
 
+// =======HELP CENTER=====
+model HelpCenter {
+  id          String    @id @default(cuid())
+  name        String
+  logo        String?   // URL to logo image
+  phoneNumber String?   @map("phone_number")
+  email       String
+  address     String?
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  @@map("help_centers")
+}
+
 // ===== USER STORIES (VIDEO) SECTION =====
 
 model UserStory {
@@ -215,4 +214,24 @@ model Post {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("posts")
+}
+
+
+model Testimonial {
+  id          String    @id @default(cuid())
+  title       String
+  description String?   @db.Text
+  date        DateTime  @default(now())
+  adminId     String    @map("admin_id")   // ✅ scalar field (foreign key)
+  thumbnail   String?
+  videoUrl    String    @map("video_url")
+  published   Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  admin       User      @relation("UserTestimonials", fields: [adminId], references: [id], onDelete: Cascade)
+  //     ^── relation field name must NOT be 'adminId'
+
+  @@map("testimonials")
 }

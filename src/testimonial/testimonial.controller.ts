@@ -19,16 +19,16 @@ export class TestimonialController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.testimonialService.findOne(+id);
+    return this.testimonialService.findOne(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateTestimonialDto: UpdateTestimonialDto) {
-    return this.testimonialService.update(+id, updateTestimonialDto);
+    return this.testimonialService.update(id, updateTestimonialDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.testimonialService.remove(+id);
+    return this.testimonialService.remove(id);
   }
 }

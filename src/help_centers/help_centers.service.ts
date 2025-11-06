@@ -1,26 +1,45 @@
 import { Injectable } from '@nestjs/common';
 import { CreateHelpCenterDto } from './dto/create-help_center.dto';
 import { UpdateHelpCenterDto } from './dto/update-help_center.dto';
-
+import { PrismaService } from '../../prisma/prisma.service';
 @Injectable()
 export class HelpCentersService {
+  constructor(private readonly prisma: PrismaService) {}
   create(createHelpCenterDto: CreateHelpCenterDto) {
-    return 'This action adds a new helpCenter';
+    const helpCenter = this.prisma.helpCenter.create({
+      data: {
+        name: createHelpCenterDto.name,
+        description: createHelpCenterDto.description,
+        phoneNumber: createHelpCenterDto.phoneNumber,
+        email: createHelpCenterDto.email,
+        address: createHelpCenterDto.address,
+        logo: createHelpCenterDto.logo,
+        isActive: createHelpCenterDto.isActive ?? true,
+      },
+    });
+    return helpCenter;
   }
 
   findAll() {
-    return `This action returns all helpCenters`;
+    return this.prisma.helpCenter.findMany();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} helpCenter`;
+  findOne(id) {
+    return this.prisma.helpCenter.findUnique({
+      where: { id },
+    });
   }
 
-  update(id: number, updateHelpCenterDto: UpdateHelpCenterDto) {
-    return `This action updates a #${id} helpCenter`;
+  update(id, updateHelpCenterDto) {
+    return this.prisma.helpCenter.update({
+      where: { id },
+      data: updateHelpCenterDto,
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} helpCenter`;
+  remove(id) {
+    return this.prisma.helpCenter.delete({
+      where: { id },
+    });
   }
 }
