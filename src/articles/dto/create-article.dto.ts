@@ -48,7 +48,7 @@ export class CreateArticleDto {
   })
   @IsString()
   @IsNotEmpty()
-  authorId: string;
+  author: string;
 
   @ApiPropertyOptional({
     description: 'Published status',
