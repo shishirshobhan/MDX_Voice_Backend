@@ -23,28 +23,6 @@ export class ArticleService {
       data: {
         ...articleData,
         publishedAt: articleData.published ? new Date() : null,
-        tags: tagIds?.length
-          ? {
-              create: tagIds.map((tagId) => ({
-                tag: { connect: { id: tagId } },
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            displayName: true,
-            email: true,
-            photoURL: true,
-          },
-        },
-        tags: {
-          include: {
-            tag: true,
-          },
-        },
       },
     });
 
@@ -54,21 +32,7 @@ export class ArticleService {
   async findOne(id: string) {
     const article = await this.prisma.article.findUnique({
       where: { id },
-      include: {
-        author: {
-          select: {
-            id: true,
-            displayName: true,
-            email: true,
-            photoURL: true,
-          },
-        },
-        tags: {
-          include: {
-            tag: true,
-          },
-        },
-      },
+       
     });
 
     if (!article) {
@@ -87,21 +51,7 @@ export class ArticleService {
   async findBySlug(slug: string) {
     const article = await this.prisma.article.findUnique({
       where: { slug },
-      include: {
-        author: {
-          select: {
-            id: true,
-            displayName: true,
-            email: true,
-            photoURL: true,
-          },
-        },
-        tags: {
-          include: {
-            tag: true,
-          },
-        },
-      },
+       
     });
 
     if (!article) {
@@ -155,21 +105,7 @@ export class ArticleService {
           },
         }),
       },
-      include: {
-        author: {
-          select: {
-            id: true,
-            displayName: true,
-            email: true,
-            photoURL: true,
-          },
-        },
-        tags: {
-          include: {
-            tag: true,
-          },
-        },
-      },
+       
     });
 
     return this.formatArticleResponse(article);
@@ -193,13 +129,13 @@ export class ArticleService {
       content: article.content,
       excerpt: article.excerpt,
       coverImage: article.coverImage,
-      authorId: article.authorId,
+      
       published: article.published,
       publishedAt: article.publishedAt,
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,
-      author: article.author,
-      tags: article.tags?.map((at: any) => at.tag) || [],
+    
+     
     };
   }
 }
