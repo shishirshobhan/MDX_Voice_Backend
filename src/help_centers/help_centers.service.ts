@@ -9,7 +9,7 @@ export class HelpCentersService {
     const helpCenter = this.prisma.helpCenter.create({
       data: {
         name: createHelpCenterDto.name,
-        description: createHelpCenterDto.description,
+        description: createHelpCenterDto.description?.replace(/\.(\s+[A-Z])/g, '.\n\n$1').trim(),
         phoneNumber: createHelpCenterDto.phoneNumber,
         email: createHelpCenterDto.email,
         address: createHelpCenterDto.address,
