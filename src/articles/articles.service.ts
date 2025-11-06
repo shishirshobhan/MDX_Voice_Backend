@@ -7,16 +7,8 @@ export class ArticleService {
   constructor(private prisma: PrismaService) {}
 
   async create(createArticleDto: CreateArticleDto) {
-    const { tagIds, ...articleData } = createArticleDto;
+    const { ...articleData } = createArticleDto;
 
-    // Check if slug already exists
-    const existingArticle = await this.prisma.article.findUnique({
-      where: { slug: articleData.slug },
-    });
-
-    if (existingArticle) {
-      throw new ConflictException('Article with this slug already exists');
-    }
 
     // Create article with tags
     const article = await this.prisma.article.create({
@@ -45,7 +37,7 @@ export class ArticleService {
     async findAll() {
     const articles = await this.prisma.article.findMany();
 
-    return this.formatArticleResponse(articles);
+    return articles;
   }
 
   async findBySlug(slug: string) {

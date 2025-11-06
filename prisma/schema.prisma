@@ -131,33 +131,8 @@ model Article {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   
-  // Relations
-  tags        ArticleTag[]
   
   @@map("articles")
-}
-
-model Tag {
-  id        String       @id @default(cuid())
-  name      String       @unique
-  slug      String       @unique
-  createdAt DateTime     @default(now())
-  
-  // Relations
-  articles  ArticleTag[]
-  
-  @@map("tags")
-}
-
-model ArticleTag {
-  articleId String
-  tagId     String
-  
-  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
-  
-  @@id([articleId, tagId])
-  @@map("article_tags")
 }
 
 // =======HELP CENTER=====
