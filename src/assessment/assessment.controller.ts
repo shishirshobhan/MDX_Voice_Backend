@@ -18,7 +18,7 @@ import { UseGuards } from '@nestjs/common';
 import { FirebaseAuthGuard } from '../auth/authguard';
 @ApiTags('Assessments')
 @Controller('assessment')
-// @UseGuards(FirebaseAuthGuard)
+@UseGuards(FirebaseAuthGuard)
 export class AssessmentController {
   constructor(private readonly assessmentService: AssessmentService) {}
 

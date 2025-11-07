@@ -37,6 +37,7 @@ export class TestimonialService {
       if (!adminExists) {
         throw new BadRequestException('Admin user not found');
       }
+      console.log('Creating testimonial with data:', createTestimonialDto);
 
       const testimonial = await this.prisma.testimonial.create({
         data: {
@@ -45,7 +46,7 @@ export class TestimonialService {
           date: createTestimonialDto.date ? new Date(createTestimonialDto.date) : new Date(),
           adminId: createTestimonialDto.adminId,
           thumbnail: createTestimonialDto.thumbnail,
-          videoUrl: createTestimonialDto.videoUrl,
+          videoUrl: createTestimonialDto.videoUrl ?? "",
           published: createTestimonialDto.published ?? false,
         },
         include: {

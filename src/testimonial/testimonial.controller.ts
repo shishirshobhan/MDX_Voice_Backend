@@ -61,7 +61,7 @@ const imageFileFilter = (req, file, cb) => {
 
 @ApiTags('Testimonials')
 @Controller('testimonial')
-@UseGuards(FirebaseAuthGuard)
+// @UseGuards(FirebaseAuthGuard)
 export class TestimonialController {
   constructor(private readonly testimonialService: TestimonialService) {}
 
@@ -88,7 +88,7 @@ export class TestimonialController {
           description: 'Thumbnail image (jpg, jpeg, png, gif, webp)',
         },
       },
-      required: ['title', 'adminId', 'video'],
+      required: ['title', 'adminId'],
     },
   })
   @UseInterceptors(

@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from 'prisma/prisma.module';
 import { FirebaseModule } from './firebase/firebase.module';
+import { UploadsModule } from './Uploads/uploads.module';
 
 @Global()
 @Module({
@@ -24,6 +25,7 @@ import { FirebaseModule } from './firebase/firebase.module';
     HelpCentersModule,
     TestimonialModule,
     StoryModule,
+     UploadsModule,
     AuthModule,
     ConfigModule.forRoot({
       isGlobal: true,

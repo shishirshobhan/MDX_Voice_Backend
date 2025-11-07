@@ -6,6 +6,7 @@ import {
   IsBoolean 
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 export class CreateTestimonialDto {
   @ApiProperty({
@@ -53,15 +54,16 @@ export class CreateTestimonialDto {
     example: 'https://storage.example.com/videos/testimonial-123.mp4',
   })
   @IsString()
-  @IsNotEmpty()
-  videoUrl: string;
+  @IsOptional()
+  videoUrl?: string;
 
   @ApiPropertyOptional({
     description: 'Whether the testimonial is published',
     example: true,
     default: false,
   })
-  @IsBoolean()
-  @IsOptional()
+@IsOptional()
+@Transform(({ value }) => value === 'true' || value === true)
+@IsBoolean()
   published?: boolean;
 }
