@@ -2,8 +2,11 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { ArticleService } from './articles.service';
 import { CreateArticleDto } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
+import { UseGuards } from '@nestjs/common';
+import { FirebaseAuthGuard } from '../auth/authguard';
 
 @Controller('articles')
+@UseGuards(FirebaseAuthGuard)
 export class ArticlesController {
   constructor(private readonly articlesService: ArticleService) {}
 

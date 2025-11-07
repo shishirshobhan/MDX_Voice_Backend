@@ -2,8 +2,11 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { HelpCentersService } from './help_centers.service';
 import { CreateHelpCenterDto } from './dto/create-help_center.dto';
 import { UpdateHelpCenterDto } from './dto/update-help_center.dto';
+import { UseGuards } from '@nestjs/common';
+import { FirebaseAuthGuard } from '../auth/authguard';
 
 @Controller('help-centers')
+@UseGuards(FirebaseAuthGuard)
 export class HelpCentersController {
   constructor(private readonly helpCentersService: HelpCentersService) {}
 

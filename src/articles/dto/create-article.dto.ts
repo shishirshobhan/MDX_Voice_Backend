@@ -43,8 +43,8 @@ export class CreateArticleDto {
   coverImage?: string;
 
   @ApiProperty({
-    description: 'Author user ID',
-    example: 'cm123abc456',
+    description: 'Author Name',
+    example: 'Shishir Shobhan Dawadi',
   })
   @IsString()
   @IsNotEmpty()
@@ -59,13 +59,4 @@ export class CreateArticleDto {
   @IsOptional()
   published?: boolean;
 
-  @ApiPropertyOptional({
-    description: 'Array of tag IDs to associate with the article',
-    example: ['tag1', 'tag2', 'tag3'],
-    type: [String],
-  })
-  @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  tagIds?: string[];
 }

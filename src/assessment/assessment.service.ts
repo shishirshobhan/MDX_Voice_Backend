@@ -292,34 +292,46 @@ export class AssessmentService {
   /**
    * Submit answers for an assessment attempt
    */
-  async submitAnswers(params: {
-    assessmentId: string;
-    userId: string;
-    attemptId: string;
-    answers: Array<{
-      questionId: string;
-      optionId: string;
-    }>;
-  }) {
-    const { assessmentId, userId, attemptId, answers } = params;
+  /**
+ * Submit answers for an assessment attempt (without saving to database)
+ */
+async submitAnswers(params: {
+  assessmentId: string;
+  userId: string;
+  attemptId: string;
+  answers: Array<{
+    questionId: string;
+    optionId: string;
+  }>;
+}) {
+  const { assessmentId, userId, attemptId, answers } = params;
 
-    // Verify assessment exists and get all questions
-    const assessment = await this.findOne(assessmentId, true);
-    
-    // Validate user exists
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-    
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
-    }
+  // Validate that answers is an array
+  if (!Array.isArray(answers)) {
+    throw new BadRequestException(
+      'Answers must be an array. Received: ' + typeof answers
+    );
+  }
 
-    // Create answers with correctness check
-    const answerPromises = answers.map(async (answer) => {
+  if (answers.length === 0) {
+    throw new BadRequestException('Answers array cannot be empty');
+  }
+
+  // Verify assessment exists
+  const assessment = await this.findOne(assessmentId, true);
+  
+  // Check answers and calculate score without saving
+  const checkedAnswers = await Promise.all(
+    answers.map(async (answer) => {
       const option = await this.prisma.mCQOption.findUnique({
         where: { id: answer.optionId },
-        include: { question: true },
+        include: { 
+          question: {
+            include: {
+              options: true,
+            },
+          },
+        },
       });
 
       if (!option) {
@@ -332,34 +344,51 @@ export class AssessmentService {
         );
       }
 
-      return this.prisma.mCQAnswer.create({
-        data: {
-          attemptId,
-          questionId: answer.questionId,
-          optionId: answer.optionId,
-          isCorrect: option.isCorrect,
-          userId,
-        },
-      });
-    });
+      // Find the correct option for this question
+      const correctOption = option.question.options.find(opt => opt.isCorrect);
 
-    const submittedAnswers = await Promise.all(answerPromises);
+      return {
+        questionId: answer.questionId,
+        questionText: option.question.question,
+        selectedOptionId: answer.optionId,
+        selectedOptionText: option.text,
+        isCorrect: option.isCorrect,
+        correctOptionId: correctOption?.id,
+        correctOptionText: correctOption?.text,
+        points: option.isCorrect ? option.question.points : 0,
+        explanation: option.question.explanation,
+      };
+    })
+  );
 
-    // Calculate score
-    const correctAnswers = submittedAnswers.filter(a => a.isCorrect).length;
-    const totalQuestions = submittedAnswers.length;
-    const score = (correctAnswers / totalQuestions) * 100;
+  // Calculate score
+  const correctAnswers = checkedAnswers.filter(a => a.isCorrect).length;
+  const totalQuestions = checkedAnswers.length;
+  const totalPoints = checkedAnswers.reduce((sum, a) => sum + a.points, 0);
+  const maxPoints = assessment.sections.reduce(
+    (sum, section) => sum + section.questions.reduce(
+      (qSum, question) => qSum + question.points,
+      0
+    ),
+    0
+  );
+  const scorePercentage = (correctAnswers / totalQuestions) * 100;
 
-    return {
-      attemptId,
-      assessmentId,
-      userId,
-      totalQuestions,
-      correctAnswers,
-      score: Math.round(score * 100) / 100,
-      submittedAt: new Date(),
-    };
-  }
+  return {
+    attemptId,
+    assessmentId,
+    assessmentTitle: assessment.title,
+    userId,
+    totalQuestions,
+    correctAnswers,
+    incorrectAnswers: totalQuestions - correctAnswers,
+    totalPoints,
+    maxPoints,
+    scorePercentage: Math.round(scorePercentage * 100) / 100,
+    submittedAt: new Date(),
+    answers: checkedAnswers,
+  };
+}
 
   /**
    * Get user's attempt results

@@ -7,16 +7,25 @@ export class ArticleService {
   constructor(private prisma: PrismaService) {}
 
   async create(createArticleDto: CreateArticleDto) {
-    const { ...articleData } = createArticleDto;
+    const {author, ...articleData } = createArticleDto;
 
+    console.log('Creating article with data:', articleData);
+    
 
-    // Create article with tags
     const article = await this.prisma.article.create({
       data: {
         ...articleData,
-        publishedAt: articleData.published ? new Date() : null,
+        author
       },
     });
+
+    // Create article with tags
+    // const article = await this.prisma.article.create({
+    //   data: {
+    //     ...articleData,
+    //     publishedAt: articleData.published ? new Date() : null,
+    //   },
+    // });
 
     return this.formatArticleResponse(article);
   }
@@ -54,7 +63,7 @@ export class ArticleService {
   }
 
   async update(id: string, updateArticleDto: UpdateArticleDto) {
-    const { tagIds, ...articleData } = updateArticleDto;
+    const {author, ...articleData } = updateArticleDto;
 
     // Check if article exists
     await this.findOne(id);
@@ -85,19 +94,7 @@ export class ArticleService {
 
     // Update article with tags
     const article = await this.prisma.article.update({
-      where: { id },
-      data: {
-        ...articleData,
-        ...(tagIds !== undefined && {
-          tags: {
-            deleteMany: {},
-            create: tagIds.map((tagId) => ({
-              tag: { connect: { id: tagId } },
-            })),
-          },
-        }),
-      },
-       
+      where: { id }, data: articleData
     });
 
     return this.formatArticleResponse(article);

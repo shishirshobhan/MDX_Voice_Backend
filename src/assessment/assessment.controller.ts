@@ -14,9 +14,11 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/
 import { AssessmentService } from './assessment.service';
 import { CreateAssessmentDto } from './dto/create-assessment.dto';
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
-
+import { UseGuards } from '@nestjs/common';
+import { FirebaseAuthGuard } from '../auth/authguard';
 @ApiTags('Assessments')
 @Controller('assessment')
+// @UseGuards(FirebaseAuthGuard)
 export class AssessmentController {
   constructor(private readonly assessmentService: AssessmentService) {}
 

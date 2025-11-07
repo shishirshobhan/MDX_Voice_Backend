@@ -1,12 +1,31 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service'; // Adjust path as needed
+import { PrismaService } from '../../prisma/prisma.service';
 import { CreateTestimonialDto } from './dto/create-testimonial.dto';
 import { UpdateTestimonialDto } from './dto/update-testimonial.dto';
 import { Prisma } from '@prisma/client';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 @Injectable()
 export class TestimonialService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Helper method to delete a file from the filesystem
+   */
+  private async deleteFile(fileUrl: string): Promise<void> {
+    if (!fileUrl) return;
+
+    try {
+      // Extract the file path from the URL (e.g., /uploads/testimonial-videos/file.mp4)
+      const filePath = path.join(process.cwd(), fileUrl);
+      await fs.unlink(filePath);
+      console.log(`Deleted file: ${filePath}`);
+    } catch (error) {
+      console.error(`Failed to delete file ${fileUrl}:`, error);
+      // Don't throw error - file deletion failure shouldn't break the operation
+    }
+  }
 
   async create(createTestimonialDto: CreateTestimonialDto) {
     try {
@@ -143,11 +162,11 @@ export class TestimonialService {
   async update(id: string, updateTestimonialDto: UpdateTestimonialDto) {
     try {
       // Check if testimonial exists
-      const exists = await this.prisma.testimonial.findUnique({
+      const existing = await this.prisma.testimonial.findUnique({
         where: { id },
       });
 
-      if (!exists) {
+      if (!existing) {
         throw new NotFoundException(`Testimonial with ID ${id} not found`);
       }
 
@@ -176,12 +195,24 @@ export class TestimonialService {
           connect: { id: updateTestimonialDto.adminId },
         };
       }
+
+      // Handle thumbnail update - delete old file if new one is provided
       if (updateTestimonialDto.thumbnail !== undefined) {
+        if (updateTestimonialDto.thumbnail && existing.thumbnail && 
+            updateTestimonialDto.thumbnail !== existing.thumbnail) {
+          await this.deleteFile(existing.thumbnail);
+        }
         updateData.thumbnail = updateTestimonialDto.thumbnail;
       }
+
+      // Handle video update - delete old file if new one is provided
       if (updateTestimonialDto.videoUrl) {
+        if (existing.videoUrl && updateTestimonialDto.videoUrl !== existing.videoUrl) {
+          await this.deleteFile(existing.videoUrl);
+        }
         updateData.videoUrl = updateTestimonialDto.videoUrl;
       }
+
       if (updateTestimonialDto.published !== undefined) {
         updateData.published = updateTestimonialDto.published;
       }
@@ -216,17 +247,26 @@ export class TestimonialService {
 
   async remove(id: string) {
     try {
-      const exists = await this.prisma.testimonial.findUnique({
+      const existing = await this.prisma.testimonial.findUnique({
         where: { id },
       });
 
-      if (!exists) {
+      if (!existing) {
         throw new NotFoundException(`Testimonial with ID ${id} not found`);
       }
 
+      // Delete the testimonial from database
       await this.prisma.testimonial.delete({
         where: { id },
       });
+
+      // Delete associated files from filesystem
+      if (existing.videoUrl) {
+        await this.deleteFile(existing.videoUrl);
+      }
+      if (existing.thumbnail) {
+        await this.deleteFile(existing.thumbnail);
+      }
 
       return {
         success: true,
@@ -289,5 +329,76 @@ export class TestimonialService {
       skip,
       take,
     });
+  }
+
+  /**
+   * Bulk delete testimonials (useful for admin cleanup)
+   */
+  async bulkDelete(ids: string[]) {
+    try {
+      // Fetch all testimonials to get their file paths
+      const testimonials = await this.prisma.testimonial.findMany({
+        where: {
+          id: { in: ids },
+        },
+        select: {
+          id: true,
+          videoUrl: true,
+          thumbnail: true,
+        },
+      });
+
+      if (testimonials.length === 0) {
+        throw new NotFoundException('No testimonials found with provided IDs');
+      }
+
+      // Delete from database
+      const deleteResult = await this.prisma.testimonial.deleteMany({
+        where: {
+          id: { in: ids },
+        },
+      });
+
+      // Delete associated files
+      for (const testimonial of testimonials) {
+        if (testimonial.videoUrl) {
+          await this.deleteFile(testimonial.videoUrl);
+        }
+        if (testimonial.thumbnail) {
+          await this.deleteFile(testimonial.thumbnail);
+        }
+      }
+
+      return {
+        success: true,
+        message: `Successfully deleted ${deleteResult.count} testimonial(s)`,
+        deletedCount: deleteResult.count,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to bulk delete testimonials');
+    }
+  }
+
+  /**
+   * Get testimonial statistics
+   */
+  async getStatistics() {
+    const [total, published, unpublished] = await Promise.all([
+      this.prisma.testimonial.count(),
+      this.prisma.testimonial.count({ where: { published: true } }),
+      this.prisma.testimonial.count({ where: { published: false } }),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        total,
+        published,
+        unpublished,
+      },
+    };
   }
 }
