@@ -121,7 +121,6 @@ export class ArticleService {
       content: article.content,
       excerpt: article.excerpt,
       coverImage: article.coverImage,
-      
       published: article.published,
       publishedAt: article.publishedAt,
       createdAt: article.createdAt,
