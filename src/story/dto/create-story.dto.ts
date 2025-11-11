@@ -1,70 +1,30 @@
-import { 
-  IsString, 
-  IsNotEmpty, 
-  IsOptional, 
-  IsUrl, 
-  IsInt, 
-  Min, 
-  IsBoolean 
-} from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
-export class CreateStoryDto {
-  @ApiProperty({
-    description: 'User ID who creates the story',
-    example: 'clxxx1234567890',
-  })
+export class CreateUserStoryDto {
+  @ApiProperty({ description: 'User ID who is creating the story' })
   @IsString()
   @IsNotEmpty()
   userId: string;
 
-  @ApiProperty({
-    description: 'Title of the user story',
-    example: 'My Journey to Recovery',
-  })
+  @ApiProperty({ description: 'Caption for the story' })
   @IsString()
   @IsNotEmpty()
-  title: string;
+  caption: string;
 
-  @ApiPropertyOptional({
-    description: 'Description of the story',
-    example: 'This is my personal story about overcoming challenges...',
-  })
+  @ApiProperty({ description: 'Image URL (will be set by controller)', required: false })
   @IsString()
   @IsOptional()
-  description?: string;
-
-  @ApiProperty({
-    description: 'URL to the video file',
-    example: 'https://storage.example.com/videos/story-123.mp4',
-  })
-  @IsUrl()
-  @IsNotEmpty()
-  videoUrl: string;
-
-  @ApiPropertyOptional({
-    description: 'URL to the video thumbnail',
-    example: 'https://storage.example.com/thumbnails/story-123.jpg',
-  })
-  @IsUrl()
-  @IsOptional()
-  thumbnail?: string;
-
-  @ApiPropertyOptional({
-    description: 'Duration of the video in seconds',
-    example: 120,
-  })
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  duration?: number;
+  imageUrl?: string;
 
   @ApiPropertyOptional({
     description: 'Whether the story is published',
     example: true,
-    default: true,
+    default: false,
   })
-  @IsBoolean()
-  @IsOptional()
+@IsOptional()
+@Transform(({ value }) => value === 'true' || value === true)
+@IsBoolean()
   published?: boolean;
 }
