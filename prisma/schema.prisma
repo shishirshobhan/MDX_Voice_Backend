@@ -151,19 +151,18 @@ model HelpCenter {
 }
 
 // ===== USER STORIES (VIDEO) SECTION =====
-
 model UserStory {
   id        String   @id @default(cuid())
   userId    String
   caption   String   @db.Text
-  imageUrl  String   // URL to uploaded image
-  published Boolean  @default(true)
+  mediaUrl  String?  // Optional URL to uploaded image/video
+  type      String   @default("text") // 'image', 'video', or 'text'
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+    
   // Relations
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+    
   @@map("user_stories")
 }
 

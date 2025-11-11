@@ -19,16 +19,20 @@ import type { Multer } from 'multer';
 import { FirebaseAuthGuard } from '../auth/authguard';
 import { ApiConsumes, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserStoryService } from './story.service';
-import { CreateUserStoryDto } from './dto/create-story.dto';
+import { CreateUserStoryDto, StoryType } from './dto/create-story.dto';
 import { UpdateUserStoryDto } from './dto/update-story.dto';
 
-
-// File filter for images
-const imageFileFilter = (req, file, cb) => {
-  if (file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+// File filter for images and videos
+const mediaFileFilter = (req, file, cb) => {
+  if (file.mimetype.match(/\/(jpg|jpeg|png|gif|webp|mp4|mov|avi|webm)$/)) {
     cb(null, true);
   } else {
-    cb(new BadRequestException('Only image files are allowed!'), false);
+    cb(
+      new BadRequestException(
+        'Only image (jpg, jpeg, png, gif, webp) and video (mp4, mov, avi, webm) files are allowed!'
+      ),
+      false
+    );
   }
 };
 
@@ -39,7 +43,7 @@ export class UserStoryController {
   constructor(private readonly userStoryService: UserStoryService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new user story with image upload' })
+  @ApiOperation({ summary: 'Create a new user story with optional media upload' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -47,18 +51,22 @@ export class UserStoryController {
       properties: {
         userId: { type: 'string' },
         caption: { type: 'string' },
-        published: { type: 'boolean' },
-        image: {
+        type: {
+          type: 'string',
+          enum: ['image', 'video', 'text'],
+          description: 'Type of story (optional - auto-detected from file)',
+        },
+        media: {
           type: 'string',
           format: 'binary',
-          description: 'Story image (jpg, jpeg, png, gif, webp)',
+          description: 'Story media file (optional - image or video)',
         },
       },
-      required: ['userId', 'caption', 'image'],
+      required: ['userId', 'caption'],
     },
   })
   @UseInterceptors(
-    FileInterceptor('image', {
+    FileInterceptor('media', {
       storage: diskStorage({
         destination: './uploads/userstory',
         filename: (req, file, cb) => {
@@ -67,34 +75,52 @@ export class UserStoryController {
           cb(null, `story-${uniqueSuffix}${ext}`);
         },
       }),
-      fileFilter: imageFileFilter,
+      fileFilter: mediaFileFilter,
       limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB limit
+        fileSize: 50 * 1024 * 1024, // 50MB limit for videos
       },
     }),
   )
   create(
     @Body() createUserStoryDto: CreateUserStoryDto,
-    @UploadedFile() file: Multer.File,
+    @UploadedFile() file?: Multer.File,
   ) {
-    console.log('Uploaded file')
-    if (!file) {
-      throw new BadRequestException('Image file is required');
+    console.log('Creating story with file:', file?.filename);
+
+    // Validate that at least caption is provided
+    if (!createUserStoryDto.caption || createUserStoryDto.caption.trim() === '') {
+      throw new BadRequestException('Caption is required');
     }
 
-    const imageUrl = `/uploads/userstory/${file.filename}`;
-
-    return this.userStoryService.create({
+    const storyData: CreateUserStoryDto = {
       ...createUserStoryDto,
-      imageUrl,
-    });
+    };
+
+    // If file is uploaded, set the media URL and type
+    if (file) {
+      storyData.mediaUrl = `/uploads/userstory/${file.filename}`;
+      
+      // Auto-detect type from mimetype if not provided
+      if (!storyData.type) {
+        if (file.mimetype.startsWith('image/')) {
+          storyData.type = StoryType.IMAGE;
+        } else if (file.mimetype.startsWith('video/')) {
+          storyData.type = StoryType.VIDEO;
+        }
+      }
+    } else {
+      // No file uploaded, this is a text-only story
+      storyData.type = StoryType.TEXT;
+    }
+
+    return this.userStoryService.create(storyData);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all user stories with optional filters' })
   findAll(
     @Query('userId') userId?: string,
-    @Query('published') published?: string,
+    @Query('type') type?: StoryType,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
     @Query('orderBy') orderBy?: 'createdAt' | 'updatedAt',
@@ -102,7 +128,7 @@ export class UserStoryController {
   ) {
     return this.userStoryService.findAll({
       userId,
-      published: published === 'true' ? true : published === 'false' ? false : undefined,
+      type,
       skip: skip ? parseInt(skip, 10) : undefined,
       take: take ? parseInt(take, 10) : undefined,
       orderBy,
@@ -110,10 +136,15 @@ export class UserStoryController {
     });
   }
 
-  @Get('published')
-  @ApiOperation({ summary: 'Get all published stories' })
-  getPublished(@Query('skip') skip?: string, @Query('take') take?: string) {
-    return this.userStoryService.getPublishedStories(
+  @Get('type/:type')
+  @ApiOperation({ summary: 'Get stories by type (image/video/text)' })
+  getByType(
+    @Param('type') type: StoryType,
+    @Query('skip') skip?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.userStoryService.getStoriesByType(
+      type,
       skip ? parseInt(skip, 10) : 0,
       take ? parseInt(take, 10) : 10,
     );
@@ -146,24 +177,27 @@ export class UserStoryController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a story with optional image upload' })
+  @ApiOperation({ summary: 'Update a story with optional media upload' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
         caption: { type: 'string' },
-        published: { type: 'boolean' },
-        image: {
+        type: {
+          type: 'string',
+          enum: ['image', 'video', 'text'],
+        },
+        media: {
           type: 'string',
           format: 'binary',
-          description: 'New story image (optional)',
+          description: 'New story media file (optional)',
         },
       },
     },
   })
   @UseInterceptors(
-    FileInterceptor('image', {
+    FileInterceptor('media', {
       storage: diskStorage({
         destination: './uploads/userstory',
         filename: (req, file, cb) => {
@@ -172,9 +206,9 @@ export class UserStoryController {
           cb(null, `story-${uniqueSuffix}${ext}`);
         },
       }),
-      fileFilter: imageFileFilter,
+      fileFilter: mediaFileFilter,
       limits: {
-        fileSize: 10 * 1024 * 1024,
+        fileSize: 50 * 1024 * 1024,
       },
     }),
   )
@@ -186,16 +220,19 @@ export class UserStoryController {
     const updateData = { ...updateUserStoryDto };
 
     if (file) {
-      updateData.imageUrl = `/uploads/userstory/${file.filename}`;
+      updateData.mediaUrl = `/uploads/userstory/${file.filename}`;
+      
+      // Auto-detect type from mimetype if not provided
+      if (!updateData.type) {
+        if (file.mimetype.startsWith('image/')) {
+          updateData.type = StoryType.IMAGE;
+        } else if (file.mimetype.startsWith('video/')) {
+          updateData.type = StoryType.VIDEO;
+        }
+      }
     }
 
     return this.userStoryService.update(id, updateData);
-  }
-
-  @Patch(':id/toggle-publish')
-  @ApiOperation({ summary: 'Toggle publish status of a story' })
-  togglePublish(@Param('id') id: string) {
-    return this.userStoryService.togglePublish(id);
   }
 
   @Delete(':id')

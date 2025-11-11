@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { CreateUserStoryDto } from './dto/create-story.dto';
+import { CreateUserStoryDto, StoryType } from './dto/create-story.dto';
 import { UpdateUserStoryDto } from './dto/update-story.dto';
 
 @Injectable()
@@ -11,7 +11,7 @@ export class UserStoryService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Helper method to delete an image from the filesystem
+   * Helper method to delete a file from the filesystem
    */
   private async deleteFile(fileUrl: string): Promise<void> {
     if (!fileUrl) return;
@@ -28,25 +28,40 @@ export class UserStoryService {
   async create(createUserStoryDto: CreateUserStoryDto) {
     try {
       // Verify user exists
-      console.log(createUserStoryDto.userId)
+      console.log('Creating story for userId:', createUserStoryDto.userId);
       const userExists = await this.prisma.user.findUnique({
         where: { id: createUserStoryDto.userId },
       });
-      console.log(!userExists)
 
       if (!userExists) {
         throw new BadRequestException('User not found');
       }
 
-      console
+      // Determine story type if not provided
+      let storyType = createUserStoryDto.type;
+      if (!storyType) {
+        if (createUserStoryDto.mediaUrl) {
+          // Try to determine from file extension
+          const ext = path.extname(createUserStoryDto.mediaUrl).toLowerCase();
+          if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+            storyType = StoryType.IMAGE;
+          } else if (['.mp4', '.mov', '.avi', '.webm'].includes(ext)) {
+            storyType = StoryType.VIDEO;
+          } else {
+            storyType = StoryType.TEXT;
+          }
+        } else {
+          storyType = StoryType.TEXT;
+        }
+      }
 
       const userStory = await this.prisma.userStory.create({
         data: {
           userId: createUserStoryDto.userId,
           caption: createUserStoryDto.caption,
-          imageUrl: createUserStoryDto.imageUrl ?? '',
-          published: createUserStoryDto.published ?? true,
-        } as any,
+          mediaUrl: createUserStoryDto.mediaUrl || null,
+          type: storyType,
+        },
         include: {
           user: {
             select: {
@@ -59,7 +74,7 @@ export class UserStoryService {
         },
       });
 
-      console.log(userStory)
+      console.log('Story created:', userStory);
 
       return {
         success: true,
@@ -70,13 +85,13 @@ export class UserStoryService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException('Failed to create story',error.message);
+      throw new BadRequestException('Failed to create story', error.message);
     }
   }
 
   async findAll(options?: {
     userId?: string;
-    published?: boolean;
+    type?: StoryType;
     skip?: number;
     take?: number;
     orderBy?: 'createdAt' | 'updatedAt';
@@ -84,7 +99,7 @@ export class UserStoryService {
   }) {
     const {
       userId,
-      published,
+      type,
       skip = 0,
       take = 10,
       orderBy = 'createdAt',
@@ -97,8 +112,8 @@ export class UserStoryService {
       where.userId = userId;
     }
 
-    if (published !== undefined) {
-      where.published = published;
+    if (type) {
+      where.type = type;
     }
 
     const [stories, total] = await Promise.all([
@@ -176,17 +191,18 @@ export class UserStoryService {
         updateData.caption = updateUserStoryDto.caption;
       }
 
-      // Handle image update - delete old file if new one is provided
-      if (updateUserStoryDto.imageUrl !== undefined) {
-        if (updateUserStoryDto.imageUrl && existing.imageUrl && 
-            updateUserStoryDto.imageUrl !== existing.imageUrl) {
-          await this.deleteFile(existing.imageUrl);
+      // Handle media update - delete old file if new one is provided
+      if (updateUserStoryDto.mediaUrl !== undefined) {
+        if (updateUserStoryDto.mediaUrl && existing.mediaUrl && 
+            updateUserStoryDto.mediaUrl !== existing.mediaUrl) {
+          await this.deleteFile(existing.mediaUrl);
         }
-        updateData.imageUrl = updateUserStoryDto.imageUrl;
-      }
+        updateData.mediaUrl = updateUserStoryDto.mediaUrl;
 
-      if (updateUserStoryDto.published !== undefined) {
-        updateData.published = updateUserStoryDto.published;
+        // Update type if media changes
+        if (updateUserStoryDto.type) {
+          updateData.type = updateUserStoryDto.type;
+        }
       }
 
       const story = await this.prisma.userStory.update({
@@ -231,9 +247,9 @@ export class UserStoryService {
         where: { id },
       });
 
-      // Delete associated image from filesystem
-      if (existing.imageUrl) {
-        await this.deleteFile(existing.imageUrl);
+      // Delete associated media from filesystem
+      if (existing.mediaUrl) {
+        await this.deleteFile(existing.mediaUrl);
       }
 
       return {
@@ -248,47 +264,6 @@ export class UserStoryService {
     }
   }
 
-  async togglePublish(id: string) {
-    const story = await this.prisma.userStory.findUnique({
-      where: { id },
-    });
-
-    if (!story) {
-      throw new NotFoundException(`Story with ID ${id} not found`);
-    }
-
-    const updated = await this.prisma.userStory.update({
-      where: { id },
-      data: { published: !story.published },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            displayName: true,
-            photoURL: true,
-          },
-        },
-      },
-    });
-
-    return {
-      success: true,
-      message: `Story ${updated.published ? 'published' : 'unpublished'} successfully`,
-      data: updated,
-    };
-  }
-
-  async getPublishedStories(skip = 0, take = 10) {
-    return this.findAll({
-      published: true,
-      skip,
-      take,
-      orderBy: 'createdAt',
-      order: 'desc',
-    });
-  }
-
   async getStoriesByUser(userId: string, skip = 0, take = 10) {
     return this.findAll({
       userId,
@@ -297,19 +272,33 @@ export class UserStoryService {
     });
   }
 
+  async getStoriesByType(type: StoryType, skip = 0, take = 10) {
+    return this.findAll({
+      type,
+      skip,
+      take,
+      orderBy: 'createdAt',
+      order: 'desc',
+    });
+  }
+
   async getStatistics() {
-    const [total, published, unpublished] = await Promise.all([
+    const [total, imageCount, videoCount, textCount] = await Promise.all([
       this.prisma.userStory.count(),
-      this.prisma.userStory.count({ where: { published: true } }),
-      this.prisma.userStory.count({ where: { published: false } }),
+      this.prisma.userStory.count({ where: { type: StoryType.IMAGE } }),
+      this.prisma.userStory.count({ where: { type: StoryType.VIDEO } }),
+      this.prisma.userStory.count({ where: { type: StoryType.TEXT } }),
     ]);
 
     return {
       success: true,
       data: {
         total,
-        published,
-        unpublished,
+        byType: {
+          image: imageCount,
+          video: videoCount,
+          text: textCount,
+        },
       },
     };
   }

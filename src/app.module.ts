@@ -12,7 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from 'prisma/prisma.module';
 import { FirebaseModule } from './firebase/firebase.module';
-import { UploadsModule } from './Uploads/uploads.module';
+import { UploadsModule } from './Uploads_helper/uploads.module';
 
 @Global()
 @Module({

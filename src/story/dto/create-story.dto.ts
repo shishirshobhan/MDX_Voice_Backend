@@ -1,6 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+
+export enum StoryType {
+  IMAGE = 'image',
+  VIDEO = 'video',
+  TEXT = 'text',
+}
 
 export class CreateUserStoryDto {
   @ApiProperty({ description: 'User ID who is creating the story' })
@@ -13,18 +18,20 @@ export class CreateUserStoryDto {
   @IsNotEmpty()
   caption: string;
 
-  @ApiProperty({ description: 'Image URL (will be set by controller)', required: false })
+  @ApiPropertyOptional({ 
+    description: 'Media URL (image or video) - set by controller',
+    required: false 
+  })
   @IsString()
   @IsOptional()
-  imageUrl?: string;
+  mediaUrl?: string;
 
   @ApiPropertyOptional({
-    description: 'Whether the story is published',
-    example: true,
-    default: false,
+    description: 'Type of story content',
+    enum: StoryType,
+    example: StoryType.TEXT,
   })
-@IsOptional()
-@Transform(({ value }) => value === 'true' || value === true)
-@IsBoolean()
-  published?: boolean;
+  @IsEnum(StoryType)
+  @IsOptional()
+  type?: StoryType;
 }
