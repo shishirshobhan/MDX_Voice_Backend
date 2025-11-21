@@ -33,6 +33,8 @@ export class UserStoryService {
         where: { id: createUserStoryDto.userId },
       });
 
+      console.log('User exists:', createUserStoryDto.userId);
+
       if (!userExists) {
         throw new BadRequestException('User not found');
       }
