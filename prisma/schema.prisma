@@ -33,21 +33,49 @@ enum Role {
 }
 
 // ===== ASSESSMENT & MCQ SECTION =====
+// Add this to your existing schema
 
 model Assessment {
-  id          String    @id @default(cuid())
+  id          String      @id @default(cuid())
   title       String
   description String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  // Relations
+  isActive    Boolean     @default(true)
   sections    Section[]
-  
-  @@map("assessments")
+  riskLevels  RiskLevel[] // Add this line
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }
 
+// Add this new model
+model RiskLevel {
+  id           String     @id @default(cuid())
+  minScore     Int
+  maxScore     Int
+  level        String
+  message      String     @db.Text
+  resources    String[]   // Array of strings in PostgreSQL
+  order        Int        @default(0)
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([assessmentId])
+}
+
+model MCQOption {
+  id         String      @id @default(cuid())
+  text       String
+  isCorrect  Boolean     @default(false)
+  pointValue Int         @default(0) // Add this line if not exists
+  order      Int         @default(0)
+  questionId String
+  question   MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([questionId])
+}
 model Section {
   id           String     @id @default(cuid())
   assessmentId String
@@ -82,21 +110,6 @@ model MCQQuestion {
   
   @@map("mcq_questions")
 }
-
-model MCQOption {
-  id         String      @id @default(cuid())
-  questionId String
-  text       String
-  isCorrect  Boolean     @default(false)
-  order      Int         @default(0)
-  createdAt  DateTime    @default(now())
-  
-  // Relations
-  question   MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  
-  @@map("mcq_options")
-}
-
 model MCQAnswer {
   id         String            @id @default(cuid())
   attemptId  String

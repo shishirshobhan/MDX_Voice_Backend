@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateAssessmentDto } from './dto/create-assessment.dto';
+import { CreateAssessmentDto, SubmitAssessmentAnswersDto } from './dto/create-assessment.dto';
 import { Prisma } from '@prisma/client';
 
 // Type for assessment with full nested relations
@@ -15,15 +15,52 @@ type AssessmentWithDetails = Prisma.AssessmentGetPayload<{
         };
       };
     };
+    riskLevels: true;
   };
 }>;
+
+interface RiskLevel {
+  minScore: number;
+  maxScore: number;
+  level: string;
+  message: string;
+  resources: string[];
+}
+
+interface AssessmentResult {
+  assessmentId: string;
+  assessmentTitle: string;
+  totalQuestions: number;
+  answeredQuestions: number;
+  totalScore: number;
+  maxPossibleScore: number;
+  riskLevel: {
+    level: string;
+    message: string;
+    resources: string[];
+  };
+  sectionBreakdown: Array<{
+    sectionName: string;
+    score: number;
+    maxScore: number;
+    questionCount: number;
+  }>;
+  detailedAnswers: Array<{
+    questionId: string;
+    questionText: string;
+    selectedOption: string;
+    pointsScored: number;
+    sectionName: string;
+  }>;
+  submittedAt: Date;
+}
 
 @Injectable()
 export class AssessmentService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Create a new assessment with sections, questions, and options
+   * Create a new assessment with sections, questions, options, and risk levels
    */
   async create(createAssessmentDto: CreateAssessmentDto): Promise<AssessmentWithDetails> {
     try {
@@ -40,18 +77,29 @@ export class AssessmentService {
               questions: {
                 create: section.questions.map((question) => ({
                   question: question.question,
-                  explanation: question.explanation,
+                  explanation: question.additionalInfo,
                   order: question.order ?? 0,
-                  points: question.points ?? 1,
+                  points: 0, // Not used in this scoring system
                   options: {
                     create: question.options.map((option) => ({
                       text: option.text,
-                      isCorrect: option.isCorrect,
+                      isCorrect: false, // Not used in point-based system
                       order: option.order ?? 0,
+                      pointValue: option.pointValue,
                     })),
                   },
                 })),
               },
+            })),
+          },
+          riskLevels: {
+            create: createAssessmentDto.riskLevels.map((level, index) => ({
+              minScore: level.minScore,
+              maxScore: level.maxScore,
+              level: level.level,
+              message: level.message,
+              resources: level.resources,
+              order: index,
             })),
           },
         },
@@ -65,6 +113,9 @@ export class AssessmentService {
                 orderBy: { order: 'asc' },
               },
             },
+            orderBy: { order: 'asc' },
+          },
+          riskLevels: {
             orderBy: { order: 'asc' },
           },
         },
@@ -104,6 +155,9 @@ export class AssessmentService {
             },
             orderBy: { order: 'asc' },
           },
+          riskLevels: {
+            orderBy: { order: 'asc' },
+          },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -119,31 +173,6 @@ export class AssessmentService {
    * Get a single assessment by ID
    */
   async findOne(id: string, includeDetails = true): Promise<AssessmentWithDetails> {
-    if (includeDetails) {
-      const assessment = await this.prisma.assessment.findUnique({
-        where: { id },
-        include: {
-          sections: {
-            include: {
-              questions: {
-                include: {
-                  options: true,
-                },
-                orderBy: { order: 'asc' },
-              },
-            },
-            orderBy: { order: 'asc' },
-          },
-        },
-      });
-
-      if (!assessment) {
-        throw new NotFoundException(`Assessment with ID ${id} not found`);
-      }
-
-      return assessment;
-    }
-
     const assessment = await this.prisma.assessment.findUnique({
       where: { id },
       include: {
@@ -158,6 +187,9 @@ export class AssessmentService {
           },
           orderBy: { order: 'asc' },
         },
+        riskLevels: {
+          orderBy: { order: 'asc' },
+        },
       },
     });
 
@@ -170,10 +202,8 @@ export class AssessmentService {
 
   /**
    * Update an assessment
-   * Note: This is a simplified update. For complex nested updates, consider separate endpoints
    */
-  async update(id: string, updateData: Partial<CreateAssessmentDto>): Promise<AssessmentWithDetails> {
-    // First check if assessment exists
+  async update(id: string, updateData: any): Promise<AssessmentWithDetails> {
     await this.prisma.assessment.findUniqueOrThrow({
       where: { id },
     });
@@ -199,15 +229,17 @@ export class AssessmentService {
           },
           orderBy: { order: 'asc' },
         },
+        riskLevels: {
+          orderBy: { order: 'asc' },
+        },
       },
     });
   }
 
   /**
-   * Delete an assessment (cascades to sections, questions, options)
+   * Delete an assessment
    */
   async remove(id: string) {
-    // Check if assessment exists
     await this.prisma.assessment.findUniqueOrThrow({
       where: { id },
     });
@@ -240,6 +272,9 @@ export class AssessmentService {
           },
           orderBy: { order: 'asc' },
         },
+        riskLevels: {
+          orderBy: { order: 'asc' },
+        },
       },
     });
   }
@@ -255,27 +290,14 @@ export class AssessmentService {
       (sum, section) => sum + section.questions.length,
       0
     );
-    const totalPoints = assessment.sections.reduce(
-      (sum, section) => sum + section.questions.reduce(
-        (qSum, question) => qSum + question.points,
-        0
-      ),
-      0
-    );
 
-    // Get total attempts (unique attemptIds)
-    const answers = await this.prisma.mCQAnswer.findMany({
-      where: {
-        question: {
-          section: {
-            assessmentId: id,
-          },
-        },
-      },
-      select: {
-        attemptId: true,
-      },
-      distinct: ['attemptId'],
+    // Calculate max possible score
+    let maxScore = 0;
+    assessment.sections.forEach(section => {
+      section.questions.forEach(question => {
+        const maxOptionScore = Math.max(...question.options.map(opt => (opt as any).pointValue || 0));
+        maxScore += maxOptionScore;
+      });
     });
 
     return {
@@ -283,225 +305,202 @@ export class AssessmentService {
       title: assessment.title,
       totalSections,
       totalQuestions,
-      totalPoints,
-      totalAttempts: answers.length,
+      maxPossibleScore: maxScore,
       isActive: assessment.isActive,
+      riskLevels: assessment.riskLevels,
     };
   }
 
   /**
-   * Submit answers for an assessment attempt
+   * Submit answers and calculate results (without storing)
    */
-  /**
- * Submit answers for an assessment attempt (without saving to database)
- */
-async submitAnswers(params: {
-  assessmentId: string;
-  userId: string;
-  attemptId: string;
-  answers: Array<{
-    questionId: string;
-    optionId: string;
-  }>;
-}) {
-  const { assessmentId, userId, attemptId, answers } = params;
+  async submitAnswers(
+    assessmentId: string,
+    submitDto: SubmitAssessmentAnswersDto
+  ): Promise<AssessmentResult> {
+    // Validate answers array
+    if (!Array.isArray(submitDto.answers) || submitDto.answers.length === 0) {
+      throw new BadRequestException('Answers array is required and cannot be empty');
+    }
 
-  // Validate that answers is an array
-  if (!Array.isArray(answers)) {
-    throw new BadRequestException(
-      'Answers must be an array. Received: ' + typeof answers
-    );
-  }
+    // Get assessment with all details
+    const assessment = await this.findOne(assessmentId, true);
 
-  if (answers.length === 0) {
-    throw new BadRequestException('Answers array cannot be empty');
-  }
+    if (!assessment.isActive) {
+      throw new BadRequestException('This assessment is not currently active');
+    }
 
-  // Verify assessment exists
-  const assessment = await this.findOne(assessmentId, true);
-  
-  // Check answers and calculate score without saving
-  const checkedAnswers = await Promise.all(
-    answers.map(async (answer) => {
-      const option = await this.prisma.mCQOption.findUnique({
-        where: { id: answer.optionId },
-        include: { 
-          question: {
-            include: {
-              options: true,
-            },
-          },
-        },
+    // Extract risk levels
+    const riskLevels = assessment.riskLevels;
+
+    if (riskLevels.length === 0) {
+      throw new BadRequestException('Assessment does not have risk levels configured');
+    }
+
+    // Create a map of all questions for quick lookup
+    const questionMap = new Map();
+    const sectionMap = new Map();
+    
+    assessment.sections.forEach(section => {
+      section.questions.forEach(question => {
+        questionMap.set(question.id, {
+          question,
+          section: section.name,
+        });
+        
+        if (!sectionMap.has(section.name)) {
+          sectionMap.set(section.name, {
+            name: section.name,
+            score: 0,
+            maxScore: 0,
+            questionCount: 0,
+          });
+        }
       });
+    });
 
-      if (!option) {
-        throw new BadRequestException(`Option ${answer.optionId} not found`);
-      }
+    // Process each answer
+    let totalScore = 0;
+    const detailedAnswers: Array<{
+      questionId: string;
+      questionText: string;
+      selectedOption: string;
+      pointsScored: number;
+      sectionName: string;
+    }> = [];
+    const answeredQuestions = new Set();
 
-      if (option.questionId !== answer.questionId) {
+    for (const answer of submitDto.answers) {
+      const questionData = questionMap.get(answer.questionId);
+      
+      if (!questionData) {
         throw new BadRequestException(
-          `Option ${answer.optionId} does not belong to question ${answer.questionId}`
+          `Question with ID ${answer.questionId} not found in this assessment`
         );
       }
 
-      // Find the correct option for this question
-      const correctOption = option.question.options.find(opt => opt.isCorrect);
+      const selectedOption = questionData.question.options.find(
+        opt => opt.id === answer.optionId
+      );
 
-      return {
-        questionId: answer.questionId,
-        questionText: option.question.question,
-        selectedOptionId: answer.optionId,
-        selectedOptionText: option.text,
-        isCorrect: option.isCorrect,
-        correctOptionId: correctOption?.id,
-        correctOptionText: correctOption?.text,
-        points: option.isCorrect ? option.question.points : 0,
-        explanation: option.question.explanation,
-      };
-    })
-  );
+      if (!selectedOption) {
+        throw new BadRequestException(
+          `Option with ID ${answer.optionId} not found for question ${answer.questionId}`
+        );
+      }
 
-  // Calculate score
-  const correctAnswers = checkedAnswers.filter(a => a.isCorrect).length;
-  const totalQuestions = checkedAnswers.length;
-  const totalPoints = checkedAnswers.reduce((sum, a) => sum + a.points, 0);
-  const maxPoints = assessment.sections.reduce(
-    (sum, section) => sum + section.questions.reduce(
-      (qSum, question) => qSum + question.points,
-      0
-    ),
-    0
-  );
-  const scorePercentage = (correctAnswers / totalQuestions) * 100;
+      const pointsScored = (selectedOption as any).pointValue || 0;
+      totalScore += pointsScored;
+      answeredQuestions.add(answer.questionId);
 
-  return {
-    attemptId,
-    assessmentId,
-    assessmentTitle: assessment.title,
-    userId,
-    totalQuestions,
-    correctAnswers,
-    incorrectAnswers: totalQuestions - correctAnswers,
-    totalPoints,
-    maxPoints,
-    scorePercentage: Math.round(scorePercentage * 100) / 100,
-    submittedAt: new Date(),
-    answers: checkedAnswers,
-  };
-}
+      // Update section breakdown
+      const sectionStats = sectionMap.get(questionData.section);
+      sectionStats.score += pointsScored;
+      sectionStats.questionCount += 1;
 
-  /**
-   * Get user's attempt results
-   */
-  async getAttemptResults(attemptId: string, userId: string) {
-    const answers = await this.prisma.mCQAnswer.findMany({
-      where: {
-        attemptId,
-        userId,
-      },
-      include: {
-        question: {
-          include: {
-            options: true,
-            section: {
-              include: {
-                assessment: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (answers.length === 0) {
-      throw new NotFoundException(`No answers found for attempt ${attemptId}`);
+      // Add to detailed answers
+      detailedAnswers.push({
+        questionId: questionData.question.id,
+        questionText: questionData.question.question,
+        selectedOption: selectedOption.text,
+        pointsScored,
+        sectionName: questionData.section,
+      });
     }
 
-    const assessment = answers[0].question.section.assessment;
-    const correctAnswers = answers.filter(a => a.isCorrect).length;
-    const totalQuestions = answers.length;
-    const score = (correctAnswers / totalQuestions) * 100;
+    // Calculate max possible score for answered questions
+    let maxPossibleScore = 0;
+    assessment.sections.forEach(section => {
+      section.questions.forEach(question => {
+        if (answeredQuestions.has(question.id)) {
+          const maxOptionScore = Math.max(
+            ...question.options.map(opt => (opt as any).pointValue || 0)
+          );
+          maxPossibleScore += maxOptionScore;
+          
+          const sectionStats = sectionMap.get(section.name);
+          sectionStats.maxScore += maxOptionScore;
+        }
+      });
+    });
+
+    // Determine risk level based on total score
+    const riskLevel = this.determineRiskLevel(totalScore, riskLevels);
 
     return {
-      attemptId,
-      assessment: {
-        id: assessment.id,
-        title: assessment.title,
-      },
-      userId,
-      totalQuestions,
-      correctAnswers,
-      incorrectAnswers: totalQuestions - correctAnswers,
-      score: Math.round(score * 100) / 100,
-      answers: answers.map(answer => ({
-        questionId: answer.questionId,
-        questionText: answer.question.question,
-        selectedOptionId: answer.optionId,
-        isCorrect: answer.isCorrect,
-        correctOption: answer.question.options.find(o => o.isCorrect),
-        explanation: answer.question.explanation,
-      })),
+      assessmentId: assessment.id,
+      assessmentTitle: assessment.title,
+      totalQuestions: questionMap.size,
+      answeredQuestions: answeredQuestions.size,
+      totalScore,
+      maxPossibleScore,
+      riskLevel,
+      sectionBreakdown: Array.from(sectionMap.values()),
+      detailedAnswers,
+      submittedAt: new Date(),
     };
   }
 
   /**
-   * Get user's assessment history
+   * Determine risk level based on score
    */
-  async getUserAssessmentHistory(userId: string, assessmentId?: string) {
-    const where: Prisma.MCQAnswerWhereInput = { userId };
-    
-    if (assessmentId) {
-      where.question = {
-        section: {
-          assessmentId,
-        },
-      };
+  private determineRiskLevel(score: number, riskLevels: any[]) {
+    // Sort risk levels by minScore to ensure correct matching
+    const sortedLevels = [...riskLevels].sort((a, b) => a.minScore - b.minScore);
+
+    for (const level of sortedLevels) {
+      if (score >= level.minScore && score <= level.maxScore) {
+        return {
+          level: level.level,
+          message: level.message,
+          resources: level.resources,
+        };
+      }
     }
 
-    const answers = await this.prisma.mCQAnswer.findMany({
-      where,
-      include: {
-        question: {
-          include: {
-            section: {
-              include: {
-                assessment: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { answeredAt: 'desc' },
-    });
+    // If no match found, return the highest risk level as default
+    const highestLevel = sortedLevels[sortedLevels.length - 1];
+    return {
+      level: highestLevel.level,
+      message: highestLevel.message,
+      resources: highestLevel.resources,
+    };
+  }
 
-    // Group by attemptId
-    const attemptMap = new Map();
-    
-    answers.forEach(answer => {
-      if (!attemptMap.has(answer.attemptId)) {
-        attemptMap.set(answer.attemptId, {
-          attemptId: answer.attemptId,
-          assessment: answer.question.section.assessment,
-          answers: [],
-          attemptedAt: answer.answeredAt,
-        });
-      }
-      attemptMap.get(answer.attemptId).answers.push(answer);
-    });
+  /**
+   * Get assessment for user (without showing point values)
+   */
+  async getAssessmentForUser(id: string) {
+    const assessment = await this.findOne(id, true);
 
-    return Array.from(attemptMap.values()).map(attempt => {
-      const correct = attempt.answers.filter((a: any) => a.isCorrect).length;
-      const total = attempt.answers.length;
-      
-      return {
-        attemptId: attempt.attemptId,
-        assessmentId: attempt.assessment.id,
-        assessmentTitle: attempt.assessment.title,
-        attemptedAt: attempt.attemptedAt,
-        totalQuestions: total,
-        correctAnswers: correct,
-        score: Math.round((correct / total) * 100 * 100) / 100,
-      };
-    });
+    if (!assessment.isActive) {
+      throw new BadRequestException('This assessment is not currently active');
+    }
+
+    // Remove point values from options for users
+    const sanitizedAssessment = {
+      id: assessment.id,
+      title: assessment.title,
+      description: assessment.description,
+      sections: assessment.sections.map(section => ({
+        id: section.id,
+        name: section.name,
+        description: section.description,
+        order: section.order,
+        questions: section.questions.map(question => ({
+          id: question.id,
+          question: question.question,
+          order: question.order,
+          options: question.options.map(option => ({
+            id: option.id,
+            text: option.text,
+            order: option.order,
+            // pointValue is intentionally excluded
+          })),
+        })),
+      })),
+    };
+
+    return sanitizedAssessment;
   }
 }

@@ -10,31 +10,44 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam, ApiBody } from '@nestjs/swagger';
 import { AssessmentService } from './assessment.service';
-import { CreateAssessmentDto } from './dto/create-assessment.dto';
-import { UpdateAssessmentDto } from './dto/update-assessment.dto';
+import { CreateAssessmentDto, UpdateAssessmentDto, SubmitAssessmentAnswersDto } from './dto/create-assessment.dto';
 import { UseGuards } from '@nestjs/common';
 import { FirebaseAuthGuard } from '../auth/authguard';
+
 @ApiTags('Assessments')
 @Controller('assessment')
-@UseGuards(FirebaseAuthGuard)
 export class AssessmentController {
   constructor(private readonly assessmentService: AssessmentService) {}
 
+  // ============================================
+  // ADMIN ENDPOINTS (Protected with Auth Guard)
+  // ============================================
+
   @Post()
-  @ApiOperation({ summary: 'Create a new assessment' })
+  // @UseGuards(FirebaseAuthGuard)
+  @ApiOperation({ 
+    summary: 'Create a new assessment (Admin only)',
+    description: 'Creates an assessment with sections, questions, options with point values, and risk level thresholds'
+  })
   @ApiResponse({ status: 201, description: 'Assessment created successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   create(@Body() createAssessmentDto: CreateAssessmentDto) {
     return this.assessmentService.create(createAssessmentDto);
   }
 
-  @Get()
-  @ApiOperation({ summary: 'Get all assessments' })
+  @Get('admin/all')
+  @UseGuards(FirebaseAuthGuard)
+  @ApiOperation({ 
+    summary: 'Get all assessments with full details (Admin only)',
+    description: 'Retrieves all assessments including point values and scoring logic'
+  })
   @ApiQuery({ name: 'isActive', required: false, type: Boolean })
   @ApiQuery({ name: 'includeDetails', required: false, type: Boolean })
   @ApiResponse({ status: 200, description: 'Assessments retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   findAll(
     @Query('isActive') isActive?: string,
     @Query('includeDetails') includeDetails?: string,
@@ -45,33 +58,44 @@ export class AssessmentController {
     });
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a single assessment by ID' })
+  @Get('admin/:id')
+  @UseGuards(FirebaseAuthGuard)
+  @ApiOperation({ 
+    summary: 'Get assessment with full details (Admin only)',
+    description: 'Retrieves a single assessment with all details including point values'
+  })
   @ApiParam({ name: 'id', type: 'string' })
-  @ApiQuery({ name: 'includeDetails', required: false, type: Boolean })
   @ApiResponse({ status: 200, description: 'Assessment retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Assessment not found' })
-  findOne(
-    @Param('id') id: string,
-    @Query('includeDetails') includeDetails?: string,
-  ) {
-    return this.assessmentService.findOne(id, includeDetails !== 'false');
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  findOne(@Param('id') id: string) {
+    return this.assessmentService.findOne(id, true);
   }
 
   @Get(':id/statistics')
-  @ApiOperation({ summary: 'Get assessment statistics' })
+  @UseGuards(FirebaseAuthGuard)
+  @ApiOperation({ 
+    summary: 'Get assessment statistics (Admin only)',
+    description: 'Get statistics including total questions, max score, and risk levels'
+  })
   @ApiParam({ name: 'id', type: 'string' })
   @ApiResponse({ status: 200, description: 'Statistics retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Assessment not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   getStatistics(@Param('id') id: string) {
     return this.assessmentService.getStatistics(id);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update an assessment' })
+  @UseGuards(FirebaseAuthGuard)
+  @ApiOperation({ 
+    summary: 'Update an assessment (Admin only)',
+    description: 'Update basic assessment properties (title, description, active status)'
+  })
   @ApiParam({ name: 'id', type: 'string' })
   @ApiResponse({ status: 200, description: 'Assessment updated successfully' })
   @ApiResponse({ status: 404, description: 'Assessment not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   update(
     @Param('id') id: string,
     @Body() updateAssessmentDto: UpdateAssessmentDto,
@@ -80,69 +104,114 @@ export class AssessmentController {
   }
 
   @Patch(':id/toggle-active')
-  @ApiOperation({ summary: 'Toggle assessment active status' })
+  @UseGuards(FirebaseAuthGuard)
+  @ApiOperation({ 
+    summary: 'Toggle assessment active status (Admin only)',
+    description: 'Enable or disable an assessment for user access'
+  })
   @ApiParam({ name: 'id', type: 'string' })
   @ApiResponse({ status: 200, description: 'Active status toggled successfully' })
   @ApiResponse({ status: 404, description: 'Assessment not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   toggleActive(@Param('id') id: string) {
     return this.assessmentService.toggleActive(id);
   }
 
   @Delete(':id')
+  @UseGuards(FirebaseAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete an assessment' })
+  @ApiOperation({ 
+    summary: 'Delete an assessment (Admin only)',
+    description: 'Permanently delete an assessment and all related data'
+  })
   @ApiParam({ name: 'id', type: 'string' })
   @ApiResponse({ status: 204, description: 'Assessment deleted successfully' })
   @ApiResponse({ status: 404, description: 'Assessment not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   remove(@Param('id') id: string) {
     return this.assessmentService.remove(id);
   }
 
-  @Post(':id/submit')
-  @ApiOperation({ summary: 'Submit answers for an assessment attempt' })
+  // ============================================
+  // USER ENDPOINTS (Public or with minimal auth)
+  // ============================================
+
+  @Get('user/:id')
+  @ApiOperation({ 
+    summary: 'Get assessment for users (Public)',
+    description: 'Retrieves assessment without showing point values or scoring logic'
+  })
   @ApiParam({ name: 'id', type: 'string', description: 'Assessment ID' })
-  @ApiResponse({ status: 200, description: 'Answers submitted successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
-  @ApiResponse({ status: 404, description: 'Assessment or user not found' })
-  submitAnswers(
-    @Param('id') assessmentId: string,
-    @Body() submitDto: {
-      userId: string;
-      attemptId: string;
-      answers: Array<{
-        questionId: string;
-        optionId: string;
-      }>;
-    },
-  ) {
-    return this.assessmentService.submitAnswers({
-      assessmentId,
-      ...submitDto,
+  @ApiResponse({ status: 200, description: 'Assessment retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Assessment not found' })
+  @ApiResponse({ status: 400, description: 'Assessment is not active' })
+  getAssessmentForUser(@Param('id') id: string) {
+    return this.assessmentService.getAssessmentForUser(id);
+  }
+
+  @Get('user/list/active')
+  @ApiOperation({ 
+    summary: 'Get list of active assessments (Public)',
+    description: 'Returns a list of all currently active assessments without detailed questions'
+  })
+  @ApiResponse({ status: 200, description: 'Active assessments retrieved successfully' })
+  getActiveAssessments() {
+    return this.assessmentService.findAll({
+      isActive: true,
+      includeDetails: false,
     });
   }
 
-  @Get('attempts/:attemptId/results')
-  @ApiOperation({ summary: 'Get results for a specific attempt' })
-  @ApiParam({ name: 'attemptId', type: 'string' })
-  @ApiQuery({ name: 'userId', required: true, type: 'string' })
-  @ApiResponse({ status: 200, description: 'Attempt results retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Attempt not found' })
-  getAttemptResults(
-    @Param('attemptId') attemptId: string,
-    @Query('userId') userId: string,
-  ) {
-    return this.assessmentService.getAttemptResults(attemptId, userId);
-  }
-
-  @Get('users/:userId/history')
-  @ApiOperation({ summary: 'Get user assessment history' })
-  @ApiParam({ name: 'userId', type: 'string' })
-  @ApiQuery({ name: 'assessmentId', required: false, type: 'string' })
-  @ApiResponse({ status: 200, description: 'User history retrieved successfully' })
-  getUserHistory(
-    @Param('userId') userId: string,
-    @Query('assessmentId') assessmentId?: string,
-  ) {
-    return this.assessmentService.getUserAssessmentHistory(userId, assessmentId);
+  @Post(':id/submit')
+  @ApiOperation({ 
+    summary: 'Submit assessment answers and get results (Public)',
+    description: 'Submit user answers and receive immediate scored results with risk assessment. Results are NOT stored.'
+  })
+  @ApiParam({ name: 'id', type: 'string', description: 'Assessment ID' })
+  @ApiBody({ type: SubmitAssessmentAnswersDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Assessment scored successfully',
+    schema: {
+      example: {
+        assessmentId: 'clx123',
+        assessmentTitle: 'Domestic Violence Awareness Assessment',
+        totalQuestions: 25,
+        answeredQuestions: 25,
+        totalScore: 42,
+        maxPossibleScore: 100,
+        riskLevel: {
+          level: 'High Risk',
+          message: 'Your responses suggest you may be in an abusive relationship...',
+          resources: ['Emergency contacts', 'Safety planning', 'Shelter information']
+        },
+        sectionBreakdown: [
+          {
+            sectionName: 'Physical Safety',
+            score: 8,
+            maxScore: 16,
+            questionCount: 4
+          }
+        ],
+        detailedAnswers: [
+          {
+            questionId: 'q1',
+            questionText: 'Does your partner ever physically hurt you?',
+            selectedOption: 'Sometimes',
+            pointsScored: 2,
+            sectionName: 'Physical Safety'
+          }
+        ],
+        submittedAt: '2025-12-14T10:30:00Z'
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Bad request - invalid answers or assessment inactive' })
+  @ApiResponse({ status: 404, description: 'Assessment not found' })
+  submitAnswers(
+    @Param('id') assessmentId: string,
+    @Body() submitDto: SubmitAssessmentAnswersDto,
+  ): any {
+    return this.assessmentService.submitAnswers(assessmentId, submitDto);
   }
 }

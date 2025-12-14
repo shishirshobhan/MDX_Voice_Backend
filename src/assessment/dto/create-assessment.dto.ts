@@ -7,27 +7,32 @@ import {
   ValidateNested, 
   IsInt, 
   Min, 
-  ArrayMinSize 
+  ArrayMinSize,
+  IsNumber,
+  Max,
+  IsEnum
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-// DTO for MCQ Options
+// DTO for MCQ Options with point values
 export class CreateMCQOptionDto {
   @ApiProperty({
     description: 'The text of the option',
-    example: 'Paris',
+    example: 'Never',
   })
   @IsString()
   @IsNotEmpty()
   text: string;
 
   @ApiProperty({
-    description: 'Whether this option is correct',
-    example: true,
+    description: 'Point value for this option',
+    example: 0,
+    minimum: 0,
   })
-  @IsBoolean()
-  isCorrect: boolean;
+  @IsInt()
+  @Min(0)
+  pointValue: number;
 
   @ApiPropertyOptional({
     description: 'Display order of the option',
@@ -44,19 +49,19 @@ export class CreateMCQOptionDto {
 export class CreateMCQQuestionDto {
   @ApiProperty({
     description: 'The question text',
-    example: 'What is the capital of France?',
+    example: 'Does your partner ever physically hurt you?',
   })
   @IsString()
   @IsNotEmpty()
   question: string;
 
   @ApiPropertyOptional({
-    description: 'Explanation for the correct answer',
-    example: 'Paris has been the capital of France since 987 AD.',
+    description: 'Additional information or context for the question',
+    example: 'This includes any form of physical violence.',
   })
   @IsString()
   @IsOptional()
-  explanation?: string;
+  additionalInfo?: string;
 
   @ApiPropertyOptional({
     description: 'Display order of the question',
@@ -68,18 +73,8 @@ export class CreateMCQQuestionDto {
   @IsOptional()
   order?: number;
 
-  @ApiPropertyOptional({
-    description: 'Points awarded for correct answer',
-    example: 10,
-    default: 1,
-  })
-  @IsInt()
-  @Min(0)
-  @IsOptional()
-  points?: number;
-
   @ApiProperty({
-    description: 'Array of answer options',
+    description: 'Array of answer options with point values',
     type: [CreateMCQOptionDto],
     minItems: 2,
   })
@@ -94,7 +89,7 @@ export class CreateMCQQuestionDto {
 export class CreateSectionDto {
   @ApiProperty({
     description: 'Name of the section',
-    example: 'Science',
+    example: 'Physical Safety',
   })
   @IsString()
   @IsNotEmpty()
@@ -102,7 +97,7 @@ export class CreateSectionDto {
 
   @ApiPropertyOptional({
     description: 'Description of the section',
-    example: 'Questions related to general science topics',
+    example: 'Questions related to physical safety in relationships',
   })
   @IsString()
   @IsOptional()
@@ -130,11 +125,56 @@ export class CreateSectionDto {
   questions: CreateMCQQuestionDto[];
 }
 
+// Risk Level Thresholds
+export class RiskLevelThresholdDto {
+  @ApiProperty({
+    description: 'Minimum score for this risk level',
+    example: 0,
+  })
+  @IsInt()
+  @Min(0)
+  minScore: number;
+
+  @ApiProperty({
+    description: 'Maximum score for this risk level',
+    example: 15,
+  })
+  @IsInt()
+  @Min(0)
+  maxScore: number;
+
+  @ApiProperty({
+    description: 'Risk level name',
+    example: 'Low Risk',
+    enum: ['Low Risk', 'Moderate Risk', 'High Risk', 'Severe Risk'],
+  })
+  @IsString()
+  @IsNotEmpty()
+  level: string;
+
+  @ApiProperty({
+    description: 'Message to display for this risk level',
+    example: 'Based on your responses, you may not be experiencing domestic violence.',
+  })
+  @IsString()
+  @IsNotEmpty()
+  message: string;
+
+  @ApiProperty({
+    description: 'Recommended resources for this risk level',
+    type: [String],
+    example: ['General awareness articles', 'Preventive information'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  resources: string[];
+}
+
 // Main DTO for Assessment
 export class CreateAssessmentDto {
   @ApiProperty({
     description: 'The title of the assessment',
-    example: 'General Knowledge Quiz',
+    example: 'Domestic Violence and Abuse Awareness Assessment',
   })
   @IsString()
   @IsNotEmpty()
@@ -142,7 +182,7 @@ export class CreateAssessmentDto {
 
   @ApiPropertyOptional({
     description: 'A detailed description of the assessment',
-    example: 'This assessment tests general knowledge across multiple subjects',
+    example: 'Self-assessment tool to help identify potential signs of domestic abuse',
   })
   @IsString()
   @IsOptional()
@@ -167,4 +207,82 @@ export class CreateAssessmentDto {
   @ValidateNested({ each: true })
   @Type(() => CreateSectionDto)
   sections: CreateSectionDto[];
+
+  @ApiProperty({
+    description: 'Risk level thresholds and associated messages',
+    type: [RiskLevelThresholdDto],
+    minItems: 1,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => RiskLevelThresholdDto)
+  riskLevels: RiskLevelThresholdDto[];
+}
+
+// DTO for submitting assessment answers (user submission)
+export class SubmitAssessmentAnswersDto {
+  @ApiProperty({
+    description: 'Array of answers',
+    example: [
+      { questionId: 'q1-id', optionId: 'opt1-id' },
+      { questionId: 'q2-id', optionId: 'opt2-id' }
+    ],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => AnswerDto)
+  answers: AnswerDto[];
+
+  @ApiPropertyOptional({
+    description: 'Optional user identifier for anonymous tracking',
+    example: 'anonymous-user-123',
+  })
+  @IsString()
+  @IsOptional()
+  userId?: string;
+}
+
+export class AnswerDto {
+  @ApiProperty({
+    description: 'Question ID',
+    example: 'clx1234567890',
+  })
+  @IsString()
+  @IsNotEmpty()
+  questionId: string;
+
+  @ApiProperty({
+    description: 'Selected option ID',
+    example: 'clx0987654321',
+  })
+  @IsString()
+  @IsNotEmpty()
+  optionId: string;
+}
+
+// Update DTO
+export class UpdateAssessmentDto {
+  @ApiPropertyOptional({
+    description: 'The title of the assessment',
+    example: 'Updated Assessment Title',
+  })
+  @IsString()
+  @IsOptional()
+  title?: string;
+
+  @ApiPropertyOptional({
+    description: 'A detailed description of the assessment',
+  })
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether the assessment is active',
+  })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }
