@@ -38,7 +38,7 @@ const mediaFileFilter = (req, file, cb) => {
 
 @ApiTags('User Stories')
 @Controller('user-story')
-// @UseGuards(FirebaseAuthGuard) // Uncomment when ready to use auth
+@UseGuards(FirebaseAuthGuard) // Uncomment when ready to use auth
 export class UserStoryController {
   constructor(private readonly userStoryService: UserStoryService) {}
 

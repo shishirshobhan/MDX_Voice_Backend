@@ -10,7 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { AssessmentService } from './assessment.service';
 import { CreateAssessmentDto, UpdateAssessmentDto, SubmitAssessmentAnswersDto } from './dto/create-assessment.dto';
 import { UseGuards } from '@nestjs/common';
@@ -26,7 +26,8 @@ export class AssessmentController {
   // ============================================
 
   @Post()
-  // @UseGuards(FirebaseAuthGuard)
+  @ApiBearerAuth('access-token')
+  @UseGuards(FirebaseAuthGuard)
   @ApiOperation({ 
     summary: 'Create a new assessment (Admin only)',
     description: 'Creates an assessment with sections, questions, options with point values, and risk level thresholds'

@@ -13,6 +13,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from 'prisma/prisma.module';
 import { FirebaseModule } from './firebase/firebase.module';
 import { UploadsModule } from './Uploads_helper/uploads.module';
+import { ChatbotModule } from './chatbot/chatbot.module';
 
 @Global()
 @Module({
@@ -26,7 +27,7 @@ import { UploadsModule } from './Uploads_helper/uploads.module';
     TestimonialModule,
     StoryModule,
      UploadsModule,
-    AuthModule,
+    AuthModule,ChatbotModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),

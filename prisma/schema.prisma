@@ -17,6 +17,8 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   lastLoginAt   DateTime  @default(now()) @map("last_login_at")
+  isadmin     Boolean   @default(false) @map("is_admin")
+
   
   // Relations
   mcqAnswers         MCQAnswer[]
