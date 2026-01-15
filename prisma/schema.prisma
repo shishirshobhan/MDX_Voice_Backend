@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id            String    @id @default(uuid())
+  firebaseUid   String    @unique @map("firebase_uid")
+  email         String    @unique
+  displayName   String?   @map("display_name")
+  photoURL      String?   @map("photo_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime  @default(now()) @map("last_login_at")
+  isadmin     Boolean   @default(false) @map("is_admin")
+
+  
+  // Relations
+  mcqAnswers         MCQAnswer[]
+  userStories        UserStory[]
+  testimonials       Testimonial[] @relation("UserTestimonials")
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+// ===== ASSESSMENT & MCQ SECTION =====
+// Add this to your existing schema
+
+model Assessment {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  isActive    Boolean     @default(true)
+  sections    Section[]
+  riskLevels  RiskLevel[] // Add this line
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+// Add this new model
+model RiskLevel {
+  id           String     @id @default(cuid())
+  minScore     Int
+  maxScore     Int
+  level        String
+  message      String     @db.Text
+  resources    String[]   // Array of strings in PostgreSQL
+  order        Int        @default(0)
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([assessmentId])
+}
+
+model MCQOption {
+  id         String      @id @default(cuid())
+  text       String
+  isCorrect  Boolean     @default(false)
+  pointValue Int         @default(0) // Add this line if not exists
+  order      Int         @default(0)
+  questionId String
+  question   MCQQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([questionId])
+}
+model Section {
+  id           String     @id @default(cuid())
+  assessmentId String
+  name         String     // e.g., "Domestic Violence", "Sexual Abuse"
+  description  String?
+  order        Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  
+  // Relations
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questions    MCQQuestion[]
+  
+  @@map("sections")
+}
+
+
+model MCQQuestion {
+  id          String    @id @default(cuid())
+  sectionId   String
+  question    String
+  explanation String?   // Optional explanation for the answer
+  order       Int       @default(0)
+  points      Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  section     Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  options     MCQOption[]
+  answers     MCQAnswer[]
+  
+  @@map("mcq_questions")
+}
+model MCQAnswer {
+  id         String            @id @default(cuid())
+  attemptId  String
+  questionId String
+  optionId   String?           // Selected option
+  isCorrect  Boolean?
+  answeredAt DateTime          @default(now())
+  userId     String
+  
+  // Relations
+
+  question   MCQQuestion       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([attemptId, questionId])
+  @@map("mcq_answers")
+}
+
+// ===== ARTICLE SECTION =====
+
+model Article {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  content     String    @db.Text
+  excerpt     String?
+  coverImage  String?
+  author      String
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  
+  @@map("articles")
+}
+
+// =======HELP CENTER=====
+model HelpCenter {
+  id          String    @id @default(cuid())
+  name        String
+  logo        String?   // URL to logo image
+  phoneNumber String?   @map("phone_number")
+  email       String
+  address     String?
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  @@map("help_centers")
+}
+
+// ===== USER STORIES (VIDEO) SECTION =====
+model UserStory {
+  id        String   @id @default(cuid())
+  userId    String
+  caption   String   @db.Text
+  mediaUrl  String?  // Optional URL to uploaded image/video
+  type      String   @default("text") // 'image', 'video', or 'text'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+    
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    
+  @@map("user_stories")
+}
+
+
+model Testimonial {
+  id          String    @id @default(cuid())
+  title       String
+  description String?   @db.Text
+  date        DateTime  @default(now())
+  adminId     String    @map("admin_id")   // ✅ scalar field (foreign key)
+  thumbnail   String?
+  videoUrl    String    @map("video_url")
+  published   Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  admin       User      @relation("UserTestimonials", fields: [adminId], references: [id], onDelete: Cascade)
+  //     ^── relation field name must NOT be 'adminId'
+
+  @@map("testimonials")
+}
